@@ -11,18 +11,26 @@ def get_window_length(window_path):
     with open(window_path, 'r') as fo:
         return int(fo.readline())
 
+
 def get_starting_hour(input_path):
-    count = 0
+    """
+    Returns the beginning hour.
+    Params:
+        input_path: path to either actual or predicted data
+    """
+
     with open(input_path) as fo:
         hour = int(fo.readline().split('|')[0])
     return hour
 
-def price_per_hour(input_path):
+def price_by_hour_generator(input_path):
     """
-    Returns a generator of tuples (hour, prices) where hour is
+    Returns a generator of pairs (hour, prices) where hour is
     the current hour and prices is a dictionary
     of stock prices.  Assumption is that hour is
     increasing.
+    Params:
+        input_path: path to either actual or predicted data
     """
 
     stockprices = {}
@@ -41,62 +49,85 @@ def price_per_hour(input_path):
                 current_hour = hour
             # fill dictionary
             stockprices[stock] = value
-            # break if hour over
+    # output of last hour
     yield (current_hour, stockprices)
 
 
-def errors_per_hour(actual, predicted):
+def errors_by_hour_generator(actual_generator, predicted_generator):
+    """
+    Returns a generator yielding tuples (hour, error_list)
+    """
+
+    # advance both actual and predicted data by one hour
+    for hour1, actual in actual_generator:
+        try:
+            hour2, predicted = next(predicted_generator)
+        except StopIteration:
+            print("Ran out of predicted prices.")
+        # if one of the two generators skips an hour,
+        # let the other catch up
+        while (hour1 != hour2):
+            if hour1 < hour2:
+                print("Actual data skipped one hour")
+                hour1, actual = next(actual_generator)
+            else:
+                print("Predicted data skipped one hour")
+                hour2, predicted = next(predicted_generator)
+        yield hour1, errors_by_hour(actual, predicted)
+
+
+def errors_by_hour(actual, predicted):
+    """
+    Compares the two stockprice dictionaries 'actual' and 'predicted'
+    and returns a list of absolute price differences
+    """
+
     errors = []
     for stock in predicted:
         if stock in actual:
             errors.append(abs(predicted[stock]-actual[stock]))
     return errors
 
-def errors_per_hour_list(actual_generator, predicted_generator):
-    """
-    Returns a generator yielding tuples (hour, error_list)
-    """
 
-    for hour1, actual in actual_generator:
-        try:
-            hour2, predicted = next(predicted_generator)
-        except StopIteration:
-            print("No more predicted prices.")
-        while (hour1 != hour2):
-            print("Hours don't match...")
-            if hour1 < hour2:
-                hour1, actual = next(actual_generator)
-            else:
-                hour2, predicted = next(predicted_generator)
-        yield hour1, errors_per_hour(actual, predicted)
+def mean_error_by_window(actual_generator, predicted_generator, window_length):
+    # tracks the most recent 'window_length' prices:
+    error_window = deque(maxlen=window_length)
+    # tracks the hours corresponding to the prices:
+    hours = deque(maxlen=window_length)
+    # fill queues
+    while (len(error_window) < window_length):
+        hour, errors = next(errors_by_hour_generator(actual_generator, predicted_generator))
+        error_window.append(errors)
+        hours.append(hour)
+    # return first average error
+    yield hours[0], hours[0] + window_length - 1, get_mean(error_window, hours)
+    for hour, errors in errors_by_hour_generator(actual_generator, predicted_generator):
+        # update errors and hours
+        error_window.popleft()
+        error_window.append(errors)
+        hours.popleft()
+        hours.append(hour)
+        yield hours[0], hours[0] + window_length - 1, get_mean(error_window, hours)
+
 
 def get_mean(error_window, hours):
+    """
+    Given a list of error lists and a corresponding list of hours,
+    return the error averaged over the first `window_length` hours.
+    """
+
     window_length = len(error_window)
     start_hour = hours[0]
     total = 0 # sum of prices
     tally = 0 # number of records
     for k in range(window_length):
+        # to prevent the case where there are skipped hours:
         if (hours[k] - start_hour >= window_length):
             break
         total += sum(error_window[k])
         tally += len(error_window[k])
-    return round(total / tally, 2)
+    return float(total / tally)
 
-def mean_error_per_window(actual_generator, predicted_generator, window_length):
-    error_window = deque(maxlen=window_length)
-    hours = deque(maxlen=window_length)
-    # fill queues
-    while (len(error_window) < window_length):
-        hour, errors = next(errors_per_hour_list(actual_generator, predicted_generator))
-        error_window.append(errors)
-        hours.append(hour)
-    yield hours[0], hours[-1], get_mean(error_window, hours)
-    for hour, errors in errors_per_hour_list(actual_generator, predicted_generator):
-        error_window.popleft()
-        error_window.append(errors)
-        hours.popleft()
-        hours.append(hour)
-        yield hours[0], hours[0]+window_length-1, get_mean(error_window, hours)
 
 def write_output(out_path):
     with open(out_path, 'w') as fo:
@@ -117,8 +148,8 @@ if __name__ == "__main__":
 
     window_length = get_window_length(window_path)
 
-    predicted_generator = price_per_hour(predicted_path)
-    actual_generator = price_per_hour(actual_path)
-    error_generator = mean_error_per_window(actual_generator, predicted_generator, window_length)
+    predicted_generator = price_by_hour_generator(predicted_path)
+    actual_generator = price_by_hour_generator(actual_path)
+    error_generator = mean_error_by_window(actual_generator, predicted_generator, window_length)
 
     write_output(out_path)
