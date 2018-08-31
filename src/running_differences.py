@@ -34,13 +34,14 @@ def price_per_hour(input_path):
             hour = int(triple[0])
             stock = triple[1]
             value = float(triple[2])
+            # check if end of hour
+            if (hour > current_hour):
+                yield (current_hour, stockprices)
+                stockprices = {}
+                current_hour = hour
             # fill dictionary
             stockprices[stock] = value
             # break if hour over
-            if (hour > current_hour):
-                yield (current_hour, stockprices)
-                current_hour = hour
-                stockprices = {stock: value}
     yield (current_hour, stockprices)
 
 
@@ -52,6 +53,10 @@ def errors_per_hour(actual, predicted):
     return errors
 
 def errors_per_hour_list(actual_generator, predicted_generator):
+    """
+    Returns a generator yielding tuples (hour, error_list)
+    """
+
     for hour1, actual in actual_generator:
         try:
             hour2, predicted = next(predicted_generator)
