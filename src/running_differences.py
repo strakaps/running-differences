@@ -101,7 +101,8 @@ def mean_error_per_window(actual_generator, predicted_generator, window_length):
 def write_output(out_path):
     with open(out_path, 'w') as fo:
         for triple in error_generator:
-            line = reduce(lambda x,y: str(x) + '|' + str(y), triple)
+            line = str(triple[0]) + '|' + str(triple[1]) + '|' \
+                    + "{:.2f}".format(triple[2])
             fo.write(line + '\n')
 
 
