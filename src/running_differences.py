@@ -1,11 +1,5 @@
 from collections import deque
-from functools import reduce
 
-
-#predicted_path = "../insight_testsuite/tests/test_1/input/predicted.txt"
-#actual_path = "../insight_testsuite/tests/test_1/input/actual.txt"
-#window_path = "../insight_testsuite/tests/test_1/input/window.txt"
-#out_path = "../output/comparison.txt"
 
 def get_window_length(window_path):
     with open(window_path, 'r') as fo:
